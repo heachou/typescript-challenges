@@ -29,7 +29,7 @@ export default defineConfig({
 				},
 				{
 					label: '理论知识',
-					autogenerate: { directory: 'reference' },
+					autogenerate: { directory: 'theory' },
 				},
 			],
 		}),
