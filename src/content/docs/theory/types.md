@@ -153,6 +153,100 @@ func("#abc")
 
 这些就是 TypeScript 类型系统中的全部类型了，大部分是从 JS 中迁移过来的，比如基础类型、Array、class 等，也添加了一些类型，比如 枚举（enum）、接口（interface）、元组等，还支持了字面量类型和 void、never、any、unknown 的特殊类型。
 
+## 类型的装饰
 
+除了描述类型的结构外，typescript的类型系统还支持描述类型的属性，比如是否可选，是否只读等：
 
+```ts
+interface IPerson{
+  readonly name: string
+  age?: number
+}
+
+type tuple = [string,number?]
+
+```
+
+## typescript 类型系统中的类型运算
+
+我们知道了 TypeScript 类型系统里有哪些类型，那么可以对这些类型做什么类型运算呢？
+
+### 条件 extends ? :
+
+typescript 里的条件判断是 `extends ? :`叫做条件类型(Condition Type) 比如：
+
+```ts
+type res = 1 extends 2 ? true : false;
+// type res = false
+```
+
+这就是typescript 类型系统里的if else.
+
+但是，上面这样的逻辑没啥意义，静态的值自己就能算出结果来，为什么要用代码去判断呢？
+
+所以，类型运算逻辑都是用来做一些动态的类型的运算的，也就是对类型参数的运算。
+
+```ts
+type isTwo<T> = T extends 2 ? true : false
+
+type res = isTwo<1> // false
+type res2 = isTwo<2> // true
+
+```
+
+这种类型也叫做`高级类型`
+
+**高级类型的特点是传入类型参数，经过一系列类型运算逻辑后，返回新的类型。**
+
+### 推导： infer
+
+如何提取类型的一部分呢？答案是 infer。
+比如提取元组类型的第一个元素：
+
+```ts
+type First<Tuple extends unknown[]> = Tuple extends [infer T,...infer R] ? T : never;
+
+type res = First<[1,2,3]>;
+
+```
+注意，第一个 extends 不是条件，条件类型是 extends ? :，这里的 extends 是约束的意思，也就是约束类型参数只能是数组类型。
+因为不知道数组元素的具体类型，所以用 unknown。
+
+### 联合： ｜
+
+联合类型（Union）类似 js 里的或运算符 |，但是作用于类型，代表类型可以是几个类型之一。
+
+```ts
+type Union = 1 | 2 | 3;
+```
+
+### 交叉： &
+
+交叉类型（Intersection）类似 js 中的与运算符 &，但是作用于类型，代表对类型做合并。
+
+```ts
+type ObjType = {a: number } & {c: boolean};
+```
+
+注意，同一类型可以合并，不同的类型没法合并，会被舍弃：
+
+```ts
+type res = 'aaa' & 222 // never
+```
+
+### 映射类型
+
+对象、class 在typescript对婷的类型是索引类型(index Type),那么如何对索引类型作修改呢？
+
+答案是 `映射类型`。
+
+```ts
+type MapType<T> = {
+  [Key in keyof T]?:T[Key]
+}
+```
+
+keyof T 是查询索引类型中所有的索引，叫做`索引查询`。
+T[Key] 是取索引类型某个索引的值，叫做`索引访问`
+in 是用于遍历联合类型的运算符。
 
