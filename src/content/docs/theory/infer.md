@@ -158,3 +158,162 @@ type GetParameters<Func extends Function> = Func extends (...args: infer Args) =
 Func 和模式类型做匹配，参数类型放到用 infer 声明的局部变量 Args 里，返回值可以是任何类型，用 unknown。
 
 返回提取到的参数类型 Args。
+
+同理，我们也可以提取返回值类型：
+
+```ts
+type GetReturnType<Func extends Function> = Func extends (...args:any[])=>infer R ? R : never
+```
+Func 和模式类型做匹配，提取返回值到通过 infer 声明的局部变量 ReturnType 里返回。
+参数类型可以是任意类型，也就是 any[]（注意，这里不能用 unknown，这里的解释涉及到参数的逆变性质，具体原因逆变那一节会解释）。
+
+### GetThisParammeterType
+
+方法里可以调用 this，比如这样：
+
+```ts
+class Dog{
+  name: string
+  constructor(name: string){
+    this.name = name
+  }
+  hello(){
+    return `hello `+ this.name
+  }
+}
+
+const tom = new Dog('tom')
+
+tom.hello()
+
+```
+
+用`对象.方法名`的方式调用的时候，this就只想那个对象。但是方法也可以用call和apply调用：
+
+```ts
+tom.hello.call({
+  abc: "test"
+})
+```
+当使用call调用的时候，this就变了，但是呢，这里却没有检查出来this指向的错误。如何让编译器能够检查出 this 指向的错误呢？
+
+可以在方法声明时指定 this 的类型：
+
+```ts
+class Dong {
+    name: string;
+
+    constructor() {
+        this.name = "dong";
+    }
+
+    hello(this: Dong) {
+        return 'hello, I\'m ' + this.name;
+    }
+}
+
+const dong = new Dong()
+dong.hello()
+dong.hello.call({
+  x:123
+})
+```
+提示如下图所示：
+
+![this_call.png](/this_call.png)
+
+这样，当 call/apply 调用的时候，就能检查出 this 指向的对象是否是对的：
+如果没有报错，说明没开启 strictBindCallApply 的编译选项，这个是控制是否按照原函数的类型来检查 bind、call、apply.
+这里的this类型同样也可以通过模式匹配提取出来：
+
+```ts
+type GetThisParameterType<T> = T extends (this:infer ThisType,...args:any[])=>any
+  ? ThisType
+  : unknown
+
+type GetThisParameterTypeRes = GetThisParameterType<typeof dong.hello> // type GetThisParameterTypeRes = Dong
+```
+
+## 构造器
+
+构造器和函数的区别是，构造器是用于创建对象的，所以可以被 new。同样，我们也可以通过模式匹配提取构造器的参数和返回值的类型：
+
+### GetInstanceType
+
+构造器类型可以用interface声明，使用 new():xxx的语法。
+比如：
+
+```ts
+interface Person{
+  name: string
+}
+
+interface PersonConstructor{
+  new(name:string):Person
+}
+```
+
+这里的 PersonConstructor 返回的是Person类型的实例对象，这个也可以通过模式匹配取出来。
+
+```ts
+type GetInstanceType<
+    ConstructorType extends new (...args: any) => any
+> = ConstructorType extends new (...args: any) => infer InstanceType 
+        ? InstanceType 
+        : any;
+```
+
+类型参数 ConstructorType 是待处理的类型，通过 extends 约束为构造器类型。
+
+用 ConstructorType 匹配一个模式类型，提取返回的实例类型到 infer 声明的局部变量 InstanceType 里，返回 InstanceType。
+
+这样就能取出构造器对应的实例类型
+
+
+### GetConstructorParameters
+
+GetInstanceType 是提取构造器返回值类型，那同样也可以提取构造器的参数类型：
+
+```ts
+type GetConstructorParameters<ConstructorType extends new(...args:any[])=>any> = ConstructorType extends new(...args:infer ParametersType)=>any ? ParametersType: any
+```
+
+类型参数 ConstructorType 为待处理的类型，通过 extends 约束为构造器类型。
+
+用 ConstructorType 匹配一个模式类型，提取参数的部分到 infer 声明的局部变量 ParametersType 里，返回 ParametersType。
+
+## 索引类型
+
+索引类型也同样可以用模式匹配提取某个索引的值的类型，这个用的也挺多的，比如 React 的 index.d.ts 里的 PropsWithRef 的高级类型，就是通过模式匹配提取了 ref 的值的类型：
+
+![ref.png](/ref.png)
+
+我们简化一下那个高级类型，提取 Props 里 ref 的类型：
+
+### GetRefProps
+
+我们通过模式匹配的方式来提取 ref 的值的类型：
+
+```ts
+type GetRefProps<Props> = 
+    'ref' extends keyof Props
+        ? Props extends { ref?: infer Value | undefined}
+            ? Value
+            : never
+        : never;
+```
+类型参数 Props 为待处理的类型。
+通过 keyof Props 取出 Props 的所有索引构成的联合类型，判断下 ref 是否在其中，也就是 'ref' extends keyof Props。
+
+在 ts3.0 里面如果没有对应的索引，Obj[Key] 返回的是 {} 而不是 never，所以这样做下兼容处理。
+如果有 ref 这个索引的话，就通过 infer 提取 Value 的类型返回，否则返回 never。
+
+## 总结
+
+就像字符串可以匹配一个模式串提取子组一样，TypeScript 类型也可以匹配一个模式类型提取某个部分的类型。
+
+**TypeScript 类型的模式匹配是通过类型 extends 一个模式类型，把需要提取的部分放到通过 infer 声明的局部变量里，后面可以从这个局部变量拿到类型做各种后续处理。**
+
+模式匹配的套路在数组、字符串、函数、构造器、索引类型、Promise 等类型中都有大量的应用。
+
+[案例合并](https://www.typescriptlang.org/play?#code/PTAEm8fRo9UZXlFmTR1TUPexgAOUFj-pCEVoeH1CcyoWUTAtBUAXjQNeUAoMkUABQCcB7AWwEsBnAUwC4yAXATwAO7UAHF2PAGoBDADYBXdgBVB7ADzUAfKAC8NUOwAePdgDsAJqxoMWHVcxMAzdrVDT57LQH5XshaE6gJuwAbs4A3BT8QqLibgoASuyscjI8OjGSvkoq6tZsagDkAOZyUiZFBRoaERRUgA6mgCN+qLVgYjwAYsy0rDy8Khmd3TyqAIK0LobG5pZyJgDWJvQA7iYA2gC6WrpjE0amFqCr9k4ugz0ANKAAdDezC8tr6+ug3mdpAUGhtDVRwm1viWSqXS-y6PVUqwAjOcAEznADMmwivwGYJ4gJSPBhIPEbwhSJaGQAMlIen1om0SeCdvo9tNQHdFisNltQDTJvtLKsbldGQ8Npdjs5QFSeM9vKL-IEQuFIv1KaT0UlMTieKKIdC4YjquS-uJRRjUtjdArwSyalRqPQBDtdTRrTtRuNaVMDnzmZt0uy6QcNi9Ds8At7XVyeUKXICeJd3SZxaBI1LPrK7VaBIa0rpU46obCEQSUan08b7TbxvidYSAMoAC2YDh4tpRNbrDbLwc5DPmTMerPb9L93j9QedHP7McuYccwsjcYTHxl3zl0Wb9fT6RXrdoGtz2uR-Q3RfXtfr2YJlDAgHVtQBk3oAmOWa59AlZ4UloPFYAHVmDxq9wm8-Xx+X7VqoT67CGoA9LQ9hFJcdDsA4zAGC6HaQdBrKgch9IAAYACQAN5wQhBgAL74ah5TEVh-o8LQfgBA4sgcD8+7-m+n7fmuuhPi+bFAaoxSlOUoBlGYoBmPQ5QFJcAllBUOp-jxgEccqRrrqxSnATJQkiWJEkVNJ4mSRWD6JAIMhSAAxlwdqmeZVmgSBNGYQc5EwaA7TWM5liuZcij0F5EE0Wh6SPk5o4HLheHhlY8GIaReEeUw8XRZWcgOERlH+pFhFxfhfnxal6VxVRASgcx0S2ZZ7CcfG7BmVVDkAEQiIJRQlLJBSWAARkkaQOFB+ygGwLyNZcjWeKNoCNQAInphlFI18n9JVVmHroK3sE1UhdRZk3jXts3lPNi01A+ihQYwv79OdzCMKB8TMEU1bDBh4XeUF5ToWFPqWJF0WRvFBSgEDAA+wMADomKDEM8AUmXeDdd00Q9T3DJGWilTR5XCIjKPPTViP3Y9z38e1QmgBTlPAxWKKEzRRLwS933ga5X1gR2kVA9DBSQ9z4Ow8lU4Rr18OgHTtAM-Wqjo1KZVLjjF2S0qQIZmLF2gUr-FUxT82VNjau3Q5r0-YFUGfTo4t48M4ua6BVT67jKmq+LWva-NlN6xQD6AL+KdT3lQbTUC+UiMOIzisHagfB6HxjdKo7SzBZAUJyYFk8MwEmsinSdvaAAAUPIvkUrABNFYzFwAlDoWgxv65eWPOXz60HtAh2H3Q1VHrcx+Hqh5yYbcBD5wlFFwgRyIwPW0FX2haKze7RC3bex6wa0ZEvPdx3nM9zx9RQVgH4iJDwci0CYyhCJHR-iKf585NnyeJ+nmfpA-ucFzcRcl8JJh8BsO9DSFrVE+Z8L7CG8MfW+YDEwLn1pA0BKhDTAhNNfEBd8hB9wHqHIee8AEFF1gfVo4hFC1lYBvduYCyAWXMqwSwh0iigDwmQKmWCx6uRqFTCyElIJyDTvQWg29GHMO1hTb8bArisPSI1Y6EQqbEQoFTas7AZAyHoHnMR396FVyYSIimtAb5n2BkolR9BLgAElwYFEYMDUAABqUAGiJFt1kZTeR8iqHcLSO7XQQQligHodvCI80rjGNUYEigwTQn0CuBZWQMg854QMEkzgkJiIV31m0EhbByGxzAaoRQrJFABXUaQ0uQCsmsDAROT+tBi4BDKH-dYACGn+gqdAgIMYMnENITk5wYDASqgqb02geTfj0AcLpcoITlGqMIaAQAIeaAAIEwAFmr+yITwMxJgehlCspQlEbRNnbNTtkDBABhTxtE+EjP6LnXx+dC61O-g05pv8tDCIproc5WyaK8J4Pw6Btz2B+I-lcL+9Tf4AOioc58xzoHvO1t4aFOyTnCHhVTcFfAaj2FjgxKyNBw4SSESwweptoIRHcdi5wuLhDUAJSYL5PCrlEspr4-uJLXIVwCLS7oElyXywyEi2FiCkiqkFbsnI3LWASQZT8q5cy2gysuX82gwyI77PEIq35-DVWqHhZqq5AKTZ3JBWCn+fAXl8DIKyfVyrDXgWNQ8upgCTg0Gju3SpKgLXwu8Kqyh6LpRN35Qqi5WqVVupXgMlBPAbXavDb3SV0qQ1yotGAQARL6AFR9KAzRD5KgcHQa0Jcr65vzQIVguQC2snhQUfRDgga5zmOwPg4yrAFrRZTH1DBS0BTwqAGtngykuriMIMGswzCxSCGYeRuiEU+HcG2kRjdnDzpgYGotiQ82dtXiKqN66S1lp7X2gI0JAgkvwXpOGNN5TXw3QWwExY2i7s3aoA98F+2djHQhCdlxWEBDPZJYiFYgA)
