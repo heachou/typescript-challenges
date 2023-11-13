@@ -249,4 +249,28 @@ type MapType<T> = {
 keyof T 是查询索引类型中所有的索引，叫做`索引查询`。
 T[Key] 是取索引类型某个索引的值，叫做`索引访问`
 in 是用于遍历联合类型的运算符。
+比如我们把一个索引类型的值变成 3 个元素的数组：
 
+```ts
+type MapType<T> = {
+  [Key in keyof T]: [T[Key],T[Key],T[Key]]
+}
+
+type res = MapType<{a:1,b:2}> // type res = {a:[1,1,1],b:[2,2,2]}
+```
+**映射类型就相当于把一个集合映射到另一个集合。这是他名字的由来**
+
+除了值可以变化，索引也可以做变化，用`as`运算符，叫做重映射。
+
+```ts
+type MapType<T> = {
+    [
+        Key in keyof T 
+            as `${Key & string}${Key & string}${Key & string}`
+    ]: [T[Key], T[Key], T[Key]]
+}
+
+```
+这里的 & string 可能大家会迷惑，解释一下：
+
+因为索引类型（对象、class 等）可以用 string、number 和 symbol 作为 key，这里 keyof T 取出的索引就是 string | number | symbol 的联合类型，和 string 取交叉部分就只剩下 string 了。就像前面所说，交叉类型会把同一类型做合并，不同类型舍弃。

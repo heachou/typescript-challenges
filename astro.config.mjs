@@ -29,7 +29,10 @@ export default defineConfig({
 				},
 				{
 					label: '理论知识',
-					autogenerate: { directory: 'theory' },
+          items: [
+						{ label: 'TS支持哪些类型', link: '/theory/types/' },
+						{ label: '套路一：模式匹配做提取', link: '/theory/infer/' },
+					],
 				},
 			],
 		}),
